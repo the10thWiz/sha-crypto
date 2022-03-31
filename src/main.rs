@@ -8,11 +8,6 @@ impl OutputSizeUser for Sha256 {
     type OutputSize = digest::consts::U32;
 }
 
-impl Reset for Sha256 {
-    fn reset(&mut self) {
-        todo!()
-    }
-}
 impl Update for Sha256 {
     fn update(&mut self, data: &[u8]) {
         todo!()
@@ -20,11 +15,6 @@ impl Update for Sha256 {
 }
 impl FixedOutput for Sha256 {
     fn finalize_into(self, out: &mut digest::Output<Self>) {
-        todo!()
-    }
-}
-impl FixedOutputReset for Sha256 {
-    fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>) {
         todo!()
     }
 }
@@ -39,16 +29,15 @@ impl Digest for Sha256 {
     }
 
     fn finalize_into(self, out: &mut digest::Output<Self>) {
-        todo!()
+        FixedOutput::finalize_into(self, out)
     }
 
     fn new_with_prefix(data: impl AsRef<[u8]>) -> Self {
-        let mut s = Self::new();
-        s.chain_update(data)
+        Self::new().chain_update(data)
     }
 
     fn chain_update(mut self, data: impl AsRef<[u8]>) -> Self {
-        Update::update(&mut self, data);
+        Update::update(&mut self, data.as_ref());
         self
     }
 
@@ -72,9 +61,7 @@ impl Digest for Sha256 {
     where
         Self: digest::FixedOutputReset,
     {
-        let output = self.finalize();
-        *self = Self::new();
-        output
+        std::mem::replace(self, Self::new()).finalize()
     }
 
     fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>)
@@ -89,6 +76,18 @@ impl Digest for Sha256 {
         Self: digest::Reset,
     {
         *self = Self::new();
+    }
+}
+
+impl Reset for Sha256 {
+    fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+impl FixedOutputReset for Sha256 {
+    fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>) {
+        FixedOutput::finalize_into(std::mem::replace(self, Self::new()), out)
     }
 }
 
