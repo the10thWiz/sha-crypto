@@ -1,27 +1,62 @@
 use digest::{Digest, FixedOutput, FixedOutputReset, OutputSizeUser, Reset, Update};
 
 struct Sha256 {
-    state: (),
+    h: [u32; 8],
+    buffer: [u8; 64],
+    filled: u8,
+    length: u64,
 }
 
-impl OutputSizeUser for Sha256 {
-    type OutputSize = digest::consts::U32;
+impl Sha256 {
+    /// update state (self.h) using self.buffer.
+    ///
+    /// Assumes self.buffer is full
+    fn run_round(&mut self) {}
 }
 
 impl Update for Sha256 {
-    fn update(&mut self, data: &[u8]) {
-        todo!()
+    fn update(&mut self, mut data: &[u8]) {
+        self.length += data.len() as u64;
+        let empty = &mut self.buffer[self.filled as usize..];
+        let len = data.len().min(empty.len());
+        empty[..len].copy_from_slice(&data[..len]);
+        if self.filled + len as u8 == 64 {
+            self.run_round();
+            data = &data[len..];
+            while data.len() >= 64 {
+                self.buffer.copy_from_slice(&data[..64]);
+                self.run_round();
+                data = &data[64..];
+            }
+        }
+        self.buffer[..data.len()].copy_from_slice(data);
+        self.filled = data.len() as u8;
     }
 }
+
 impl FixedOutput for Sha256 {
-    fn finalize_into(self, out: &mut digest::Output<Self>) {
-        todo!()
+    fn finalize_into(mut self, out: &mut digest::Output<Self>) {
+        // TODO: padding message with nessecary bits.
+        for (out, s) in out
+            .iter_mut()
+            .zip(self.h.iter().flat_map(|&h| h.to_be_bytes()))
+        {
+            *out = s;
+        }
     }
 }
 
 impl Digest for Sha256 {
     fn new() -> Self {
-        todo!()
+        Self {
+            h: [
+                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+                0x5be0cd19,
+            ],
+            buffer: [0; 64],
+            filled: 0,
+            length: 0,
+        }
     }
 
     fn update(&mut self, data: impl AsRef<[u8]>) {
@@ -79,6 +114,10 @@ impl Digest for Sha256 {
     }
 }
 
+impl OutputSizeUser for Sha256 {
+    type OutputSize = digest::consts::U32;
+}
+
 impl Reset for Sha256 {
     fn reset(&mut self) {
         *self = Self::new();
@@ -95,7 +134,25 @@ fn main() {
     println!("Hello, world!");
 }
 
-#[test]
-fn simple() {
-    let s = "Some nice string";
+#[cfg(test)]
+mod tests {
+    use digest::*;
+
+    macro_rules! sha_test {
+        ($i:literal) => {
+            let s = $i;
+            let my_res = crate::Sha256::new().chain_update(s.as_bytes()).finalize();
+            let ex_res = sha2::Sha256::new().chain_update(s.as_bytes()).finalize();
+            assert_eq!(ex_res, my_res, concat!("Failed to hash `", $i, "` correctly"));
+        };
+    }
+
+    #[test]
+    fn simple() {
+        sha_test!("Hello World!");
+        sha_test!("helloworld");
+        sha_test!("Some nice string");
+        sha_test!("Some nice string");
+        sha_test!("Some nice string");
+    }
 }
