@@ -10,3 +10,4 @@ digest = "*"
 
 [dev-dependencies]
 sha2 = "*"
+rand = "*"
