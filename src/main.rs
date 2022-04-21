@@ -1,5 +1,6 @@
 use digest::{Digest, FixedOutput, FixedOutputReset, OutputSizeUser, Reset, Update};
 
+/// The 512 bit variant if Sha-2
 mod sha512;
 
 struct Sha256 {
@@ -115,6 +116,13 @@ impl Sha256 {
 }
 
 impl Update for Sha256 {
+    ///
+    /// ```
+    /// let s = "Hello World";
+    /// let mut hasher = crate::Sha256::new();
+    /// hasher.update(s.as_bytes());
+    /// assert_eq!([/**/], hasher.finalize());
+    /// ```
     fn update(&mut self, mut data: &[u8]) {
         self.length += data.len() as u64;
         let empty = &mut self.buffer[self.filled as usize..];
