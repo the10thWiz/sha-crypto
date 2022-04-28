@@ -1,11 +1,7 @@
 use digest::{Digest, FixedOutput, FixedOutputReset, OutputSizeUser, Reset, Update};
 
 /// The 512 bit variant if Sha-2
-mod sha512;
-mod sha224;
-mod sha384;
-
-struct Sha256 {
+struct Sha224 {
     h: [u32; 8],
     buffer: [u8; 64],
     filled: u8,
@@ -23,7 +19,7 @@ const K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-impl Sha256 {
+impl Sha224 {
     /// update state (self.h) using self.buffer.
     ///
     /// Assumes self.buffer is full
@@ -117,7 +113,7 @@ impl Sha256 {
     }
 }
 
-impl Update for Sha256 {
+impl Update for Sha224 {
     ///
     /// ```
     /// let s = "Hello World";
@@ -148,7 +144,7 @@ impl Update for Sha256 {
 
 const ZERO_BYTES: [u8; 64] = [0u8; 64];
 
-impl FixedOutput for Sha256 {
+impl FixedOutput for Sha224 {
     fn finalize_into(mut self, out: &mut digest::Output<Self>) {
         // TODO: padding message with nessecary bits.
         // Calc padding
@@ -168,17 +164,16 @@ impl FixedOutput for Sha256 {
         Update::update(&mut self, &length.to_be_bytes());
 
         out.iter_mut()
-            .zip(self.h.iter().flat_map(|&h| h.to_be_bytes()))
+            .zip(self.h[..7].iter().flat_map(|&h| h.to_be_bytes()))
             .for_each(|(out, s)| *out = s);
     }
 }
 
-impl Digest for Sha256 {
+impl Digest for Sha224 {
     fn new() -> Self {
         Self {
             h: [
-                0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
-                0x5be0cd19,
+                0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4,
             ],
             buffer: [0; 64],
             filled: 0,
@@ -241,17 +236,17 @@ impl Digest for Sha256 {
     }
 }
 
-impl OutputSizeUser for Sha256 {
-    type OutputSize = digest::consts::U32;
+impl OutputSizeUser for Sha224 {
+    type OutputSize = digest::consts::U28;
 }
 
-impl Reset for Sha256 {
+impl Reset for Sha224 {
     fn reset(&mut self) {
         *self = Self::new();
     }
 }
 
-impl FixedOutputReset for Sha256 {
+impl FixedOutputReset for Sha224 {
     fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>) {
         FixedOutput::finalize_into(std::mem::replace(self, Self::new()), out)
     }
@@ -269,8 +264,8 @@ mod tests {
     macro_rules! sha_test {
         ($i:literal) => {
             let s = $i;
-            let my_res = crate::Sha256::new().chain_update(s.as_bytes()).finalize();
-            let ex_res = sha2::Sha256::new().chain_update(s.as_bytes()).finalize();
+            let my_res = super::Sha224::new().chain_update(s.as_bytes()).finalize();
+            let ex_res = sha2::Sha224::new().chain_update(s.as_bytes()).finalize();
             assert_eq!(
                 ex_res, my_res,
                 concat!("Failed to hash `", $i, "` correctly")
@@ -294,8 +289,8 @@ mod tests {
         let mut rng = rand::thread_rng();
         for _ in 0..10 {
             let buffer: Vec<_> = (0..10).map(|_| rng.gen::<u8>()).collect();
-            let my_res = crate::Sha256::new().chain_update(&buffer).finalize();
-            let ex_res = sha2::Sha256::new().chain_update(&buffer).finalize();
+            let my_res = super::Sha224::new().chain_update(&buffer).finalize();
+            let ex_res = sha2::Sha224::new().chain_update(&buffer).finalize();
             assert_eq!(ex_res, my_res, "Failed on random test");
         }
     }
