@@ -1,10 +1,11 @@
 use digest::{Digest, FixedOutput, FixedOutputReset, OutputSizeUser, Reset, Update};
 
-/// The 512 bit variant if Sha-2
-mod sha512;
+/// The different SHA2 algorithms
 mod sha224;
 mod sha384;
+mod sha512;
 
+/// Struct for SHA256
 struct Sha256 {
     h: [u32; 8],
     buffer: [u8; 64],
@@ -12,6 +13,7 @@ struct Sha256 {
     length: u64,
 }
 
+/// Array of round constants. They are the first 32 bits of the cube roots of the first 64 primes in hex form
 const K: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
     0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -24,50 +26,36 @@ const K: [u32; 64] = [
 ];
 
 impl Sha256 {
-    /// update state (self.h) using self.buffer.
+    /// Update state (self.h) using self.buffer.
     ///
     /// Assumes self.buffer is full
     fn run_round(&mut self) {
-        //create a 64-entry message schedule array w[0..63] of 32-bit words
+        // Create a 64-entry message schedule array w[0..63] of 32-bit words
         let mut w = [0u32; 64];
-        //(The initial values in w[0..63] don't matter, so many implementations zero them here)
-        //copy chunk into first 16 words w[0..15] of the message schedule array
+        // The initial values in w[0..63] don't matter, so many implementations zero them here
+        // Copy chunk into first 16 words w[0..15] of the message schedule array
         self.buffer
             .chunks(4)
             .zip(w.iter_mut())
             .for_each(|(buf, w)| *w = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]));
 
-        //Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
+        // Extend the first 16 words into the remaining 48 words w[16..63] of the message schedule array:
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
-            //println!("s0 = {:032b}", s0);
             let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-            //println!("s1 = {:032b}", s1);
+
             w[i] = w[i - 16]
                 .wrapping_add(s0)
                 .wrapping_add(w[i - 7])
                 .wrapping_add(s1);
-            //println!("w[16] = {:032b}", w[16]);
-            //panic!();
         }
-        //for i from 16 to 63
-        //s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
-        //s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
-        //w[i] := w[i-16] + s0 + w[i-7] + s1
 
-        //Initialize working variables to current hash value:
+        // Initialize working variables to current hash value:
         let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.h.clone();
-        //a := h0
-        //b := h1
-        //c := h2
-        //d := h3
-        //e := h4
-        //f := h5
-        //g := h6
-        //h := h7
 
-        //Compression function main loop:
+        // Compression function main loop:
         for i in 0..64 {
+            // Perform linear manipulation to shuffle the data further
             let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
             let ch = (e & f) ^ ((!e) & g);
             let temp1 = h
@@ -79,6 +67,7 @@ impl Sha256 {
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let temp2 = s0.wrapping_add(maj);
 
+            // Assign results to temp variables
             h = g;
             g = f;
             f = e;
@@ -88,24 +77,8 @@ impl Sha256 {
             b = a;
             a = temp1.wrapping_add(temp2);
         }
-        //for i from 0 to 63
-        //S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
-        //ch := (e and f) xor ((not e) and g)
-        //temp1 := h + S1 + ch + k[i] + w[i]
-        //S0 := (d rightrotdte 2) xor (d rightrotdte 13) xor (d rightrotdte 22)
-        //maj := (a and b) xor (a and c) xor (b and c)
-        //temp2 := S0 + maj
 
-        //h := g
-        //g := f
-        //f := e
-        //e := d + temp1
-        //d := c
-        //c := b
-        //b := a
-        //a := temp1 + temp2
-
-        //Add the compressed chunk to the current hash value:
+        // Add the compressed chunk to the current hash value:
         self.h[0] = self.h[0].wrapping_add(a);
         self.h[1] = self.h[1].wrapping_add(b);
         self.h[2] = self.h[2].wrapping_add(c);
@@ -117,22 +90,22 @@ impl Sha256 {
     }
 }
 
+/// Updates the struct variables for the SHA256 hash
+/// Specifically, it calculates the length, buffer and filled variables
 impl Update for Sha256 {
-    ///
-    /// ```
-    /// let s = "Hello World";
-    /// let mut hasher = crate::Sha256::new();
-    /// hasher.update(s.as_bytes());
-    /// assert_eq!([/**/], hasher.finalize());
-    /// ```
     fn update(&mut self, mut data: &[u8]) {
+        // Define variables
         self.length += data.len() as u64;
         let empty = &mut self.buffer[self.filled as usize..];
         let len = data.len().min(empty.len());
         empty[..len].copy_from_slice(&data[..len]);
+
+        // Make sure we have enough bits
         if self.filled + len as u8 == 64 {
             self.run_round();
             data = &data[len..];
+
+            // Break up the data into 64 bit chunks if needed
             while data.len() >= 64 {
                 self.buffer.copy_from_slice(&data[..64]);
                 self.run_round();
@@ -146,25 +119,24 @@ impl Update for Sha256 {
     }
 }
 
+// A list of zero bytes
 const ZERO_BYTES: [u8; 64] = [0u8; 64];
 
+/// Split up and pad the original message ahead of time for processing
 impl FixedOutput for Sha256 {
     fn finalize_into(mut self, out: &mut digest::Output<Self>) {
-        // TODO: padding message with nessecary bits.
-        // Calc padding
+        // Calculate padding
         let mut filled = self.filled as usize;
         let length = self.length * 8;
         Update::update(&mut self, &[0b10000000]);
-        //println!("With 1bit: {:X?}", self.buffer);
-        //dbg!(self.filled);
 
+        // Update the struct
         if filled > 64 - 8 {
             Update::update(&mut self, &ZERO_BYTES[filled..]);
             filled = 0;
         }
+
         Update::update(&mut self, &ZERO_BYTES[filled..(64 - 8 - 1)]);
-        //println!("With K0s: {:X?}", self.buffer);
-        //dbg!(self.filled);
         Update::update(&mut self, &length.to_be_bytes());
 
         out.iter_mut()
@@ -173,7 +145,9 @@ impl FixedOutput for Sha256 {
     }
 }
 
+/// Defines useful functions for our SHA256 struct
 impl Digest for Sha256 {
+    // Instantiate struct with the first 32 bits of the fractional parts of the square roots of the first 8 primes
     fn new() -> Self {
         Self {
             h: [
@@ -186,6 +160,7 @@ impl Digest for Sha256 {
         }
     }
 
+    // Helper methods to make our hash function simpler and more compact
     fn update(&mut self, data: impl AsRef<[u8]>) {
         <Self as Update>::update(self, data.as_ref())
     }
@@ -241,31 +216,38 @@ impl Digest for Sha256 {
     }
 }
 
+/// Defines the output size
 impl OutputSizeUser for Sha256 {
     type OutputSize = digest::consts::U32;
 }
 
+/// Reset function for our hash algorithm
 impl Reset for Sha256 {
     fn reset(&mut self) {
         *self = Self::new();
     }
 }
 
+/// Reset our algorithm's output
 impl FixedOutputReset for Sha256 {
     fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>) {
         FixedOutput::finalize_into(std::mem::replace(self, Self::new()), out)
     }
 }
 
+/// Main function, not used
 fn main() {
-    println!("Hello, world!");
+    println!("Welcome to our SHA2 family implementation!");
 }
 
+/// Tests for our SHA256 implementation
 #[cfg(test)]
 mod tests {
     use digest::*;
     use rand::Rng;
 
+    // Hash the given string with our algorithm and Rust's SHA256 algorithm
+    // If they are equal then we successfully hashed the string
     macro_rules! sha_test {
         ($i:literal) => {
             let s = $i;
@@ -278,6 +260,7 @@ mod tests {
         };
     }
 
+    // Simple string tests
     #[test]
     fn simple() {
         sha_test!("hello world");
@@ -285,10 +268,11 @@ mod tests {
         sha_test!("");
         sha_test!("helloworld");
         sha_test!("Some nice string");
-        sha_test!("Some nice string");
-        sha_test!("Some nice string");
+        sha_test!("Trying some numbers: 1234");
+        sha_test!("5678");
     }
 
+    // Randomly generate a list of numbers, hash them and check for equality
     #[test]
     fn rand() {
         let mut rng = rand::thread_rng();

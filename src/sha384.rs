@@ -1,5 +1,6 @@
 use digest::{Digest, FixedOutput, FixedOutputReset, OutputSizeUser, Reset, Update};
 
+/// The 384-bit variant of SHA512
 struct Sha384 {
     h: [u64; 8],
     buffer: [u8; 128],
@@ -7,6 +8,7 @@ struct Sha384 {
     length: u128,
 }
 
+/// Array of round constants. They are the first 64 bits of the cube roots of the first 64 primes in hex form
 const K: [u64; 80] = [
     0x428a2f98d728ae22,
     0x7137449123ef65cd,
@@ -91,14 +93,14 @@ const K: [u64; 80] = [
 ];
 
 impl Sha384 {
-    /// update state (self.h) using self.buffer.
+    /// Update state (self.h) using self.buffer.
     ///
     /// Assumes self.buffer is full
     fn run_round(&mut self) {
-        //create a 64-entry message schedule array w[0..79] of 64-bit words
+        // Create a 64-entry message schedule array w[0..79] of 64-bit words
         let mut w = [0u64; 80];
-        //(The initial values in w[0..79] don't matter, so many implementations zero them here)
-        //copy chunk into first 16 words w[0..15] of the message schedule array
+        // The initial values in w[0..79] don't matter, so many implementations zero them here
+        // Copy chunk into first 16 words w[0..15] of the message schedule array
         self.buffer
             .chunks(8)
             .zip(w.iter_mut())
@@ -108,36 +110,21 @@ impl Sha384 {
                 ])
             });
 
-        //Extend the first 16 words into the remaining 64 words w[16..79] of the message schedule array:
+        // Extend the first 16 words into the remaining 64 words w[16..79] of the message schedule array:
         for i in 16..80 {
             let s0 = w[i - 15].rotate_right(1) ^ w[i - 15].rotate_right(8) ^ (w[i - 15] >> 7);
-            //println!("s0 = {:032b}", s0);
             let s1 = w[i - 2].rotate_right(19) ^ w[i - 2].rotate_right(61) ^ (w[i - 2] >> 6);
-            //println!("s1 = {:032b}", s1);
+
             w[i] = w[i - 16]
                 .wrapping_add(s0)
                 .wrapping_add(w[i - 7])
                 .wrapping_add(s1);
-            //println!("w[16] = {:032b}", w[16]);
-            //panic!();
         }
-        //for i from 16 to 63
-        //s0 := (w[i-15] rightrotate  7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift  3)
-        //s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
-        //w[i] := w[i-16] + s0 + w[i-7] + s1
 
-        //Initialize working variables to current hash value:
+        // Initialize working variables to current hash value:
         let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut h] = self.h.clone();
-        //a := h0
-        //b := h1
-        //c := h2
-        //d := h3
-        //e := h4
-        //f := h5
-        //g := h6
-        //h := h7
 
-        //Compression function main loop:
+        // Compression function main loop:
         for i in 0..80 {
             let s1 = e.rotate_right(14) ^ e.rotate_right(18) ^ e.rotate_right(41);
             let ch = (e & f) ^ ((!e) & g);
@@ -150,6 +137,7 @@ impl Sha384 {
             let maj = (a & b) ^ (a & c) ^ (b & c);
             let temp2 = s0.wrapping_add(maj);
 
+            // Assign results to temp variables
             h = g;
             g = f;
             f = e;
@@ -159,24 +147,8 @@ impl Sha384 {
             b = a;
             a = temp1.wrapping_add(temp2);
         }
-        //for i from 0 to 63
-        //S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
-        //ch := (e and f) xor ((not e) and g)
-        //temp1 := h + S1 + ch + k[i] + w[i]
-        //S0 := (d rightrotdte 2) xor (d rightrotdte 13) xor (d rightrotdte 22)
-        //maj := (a and b) xor (a and c) xor (b and c)
-        //temp2 := S0 + maj
 
-        //h := g
-        //g := f
-        //f := e
-        //e := d + temp1
-        //d := c
-        //c := b
-        //b := a
-        //a := temp1 + temp2
-
-        //Add the compressed chunk to the current hash value:
+        // Add the compressed chunk to the current hash value:
         self.h[0] = self.h[0].wrapping_add(a);
         self.h[1] = self.h[1].wrapping_add(b);
         self.h[2] = self.h[2].wrapping_add(c);
@@ -188,15 +160,22 @@ impl Sha384 {
     }
 }
 
+/// Updates the struct variables for the SHA256 hash
+/// Specifically, it calculates the length, buffer and filled variables
 impl Update for Sha384 {
     fn update(&mut self, mut data: &[u8]) {
+        // Define variables
         self.length += data.len() as u128;
         let empty = &mut self.buffer[self.filled as usize..];
         let len = data.len().min(empty.len());
         empty[..len].copy_from_slice(&data[..len]);
+
+        // Make sure we have enough bits
         if self.filled + len as u8 == 128 {
             self.run_round();
             data = &data[len..];
+
+            // Break up the data into 64 bit chunks if needed
             while data.len() >= 128 {
                 self.buffer.copy_from_slice(&data[..128]);
                 self.run_round();
@@ -210,26 +189,24 @@ impl Update for Sha384 {
     }
 }
 
+/// Split up and pad the original message ahead of time for processing
 impl FixedOutput for Sha384 {
     fn finalize_into(mut self, out: &mut digest::Output<Self>) {
-        // TODO: padding message with nessecary bits.
-        // Calc padding
+        // Calculate padding
         let mut filled = self.filled as usize;
         let length = self.length * 8;
         Update::update(&mut self, &[0b10000000]);
-        //println!("With 1bit: {:X?}", self.buffer);
-        //dbg!(self.filled);
 
+        // Update the struct
         if filled > 128 - std::mem::size_of::<u128>() {
             Update::update(&mut self, &ZERO_BYTES[filled..]);
             filled = 0;
         }
+
         Update::update(
             &mut self,
             &ZERO_BYTES[filled..(128 - std::mem::size_of::<u128>() - 1)],
         );
-        //println!("With K0s: {:X?}", self.buffer);
-        //dbg!(self.filled);
         Update::update(&mut self, &length.to_be_bytes());
 
         out.iter_mut()
@@ -238,9 +215,12 @@ impl FixedOutput for Sha384 {
     }
 }
 
+// A list of zero bytes
 const ZERO_BYTES: [u8; 128] = [0u8; 128];
 
+/// Defines useful functions for our SHA256 struct
 impl Digest for Sha384 {
+    // Instantiate struct with the first 64 bits of the fractional parts of the square roots of the first 8 primes
     fn new() -> Self {
         Self {
             h: [
@@ -259,6 +239,7 @@ impl Digest for Sha384 {
         }
     }
 
+    // Helper methods to make our hash function simpler and more compact
     fn update(&mut self, data: impl AsRef<[u8]>) {
         <Self as Update>::update(self, data.as_ref())
     }
@@ -314,27 +295,33 @@ impl Digest for Sha384 {
     }
 }
 
+/// Defines the output size
 impl OutputSizeUser for Sha384 {
     type OutputSize = digest::consts::U48;
 }
 
+/// Reset function for our hash algorithm
 impl Reset for Sha384 {
     fn reset(&mut self) {
         *self = Self::new();
     }
 }
 
+/// Reset our algorithm's output
 impl FixedOutputReset for Sha384 {
     fn finalize_into_reset(&mut self, out: &mut digest::Output<Self>) {
         FixedOutput::finalize_into(std::mem::replace(self, Self::new()), out)
     }
 }
 
+/// Tests for our SHA512 implementation
 #[cfg(test)]
 mod tests {
     use digest::*;
     use rand::Rng;
 
+    // Hash the given string with our algorithm and Rust's SHA512 algorithm
+    // If they are equal then we successfully hashed the string
     macro_rules! sha_test {
         ($i:literal) => {
             let s = $i;
@@ -347,6 +334,7 @@ mod tests {
         };
     }
 
+    // Simple string tests
     #[test]
     fn simple() {
         sha_test!("hello world");
@@ -354,10 +342,11 @@ mod tests {
         sha_test!("");
         sha_test!("helloworld");
         sha_test!("Some nice string");
-        sha_test!("Some nice string");
-        sha_test!("Some nice string");
+        sha_test!("Trying some numbers: 1234");
+        sha_test!("5678");
     }
 
+    // Randomly generate a list of numbers, hash them and check for equality
     #[test]
     fn rand() {
         let mut rng = rand::thread_rng();
